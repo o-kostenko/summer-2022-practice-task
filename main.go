@@ -15,8 +15,8 @@ var (
 	ErrWrongCriteria         = errors.New("unsupported criteria")
 	ErrEmptyDepartureStation = errors.New("empty departure station")
 	ErrEmptyArrivalStation   = errors.New("empty arrival station")
-	ErrBadDepartureStation   = errors.New("bad arrival station input")
-	ErrBadArrivalStation     = errors.New("bad departure station input")
+	ErrBadArrivalStation     = errors.New("bad arrival station input")
+	ErrBadDepartureStation   = errors.New("bad departure station input")
 )
 
 type Trains []Train
@@ -103,6 +103,12 @@ func FindTrains(departureStation, arrivalStation, criteria string) (Trains, erro
 		return nil, fmt.Errorf("parse json error:%w", err)
 	}
 
+	switch criteria {
+	case "price", "arrival-time", "departure-time":
+	default:
+		return nil, ErrWrongCriteria
+	}
+
 	for i := range data {
 		if data[i].DepartureStationID == dSt && data[i].ArrivalStationID == aSt {
 			result = append(result, data[i])
@@ -124,9 +130,6 @@ func FindTrains(departureStation, arrivalStation, criteria string) (Trains, erro
 		sort.SliceStable(result, func(i, j int) bool {
 			return result[i].DepartureTime.Sub(result[j].DepartureTime) < 0
 		})
-
-	default:
-		return nil, ErrWrongCriteria
 	}
 
 	// маєте повернути правильні значення
@@ -134,19 +137,20 @@ func FindTrains(departureStation, arrivalStation, criteria string) (Trains, erro
 }
 
 func PrintTrains(trains Trains) {
-	fmt.Printf("trainId depStId arrStId price   arrivalTime    departureTime\n")
+	fmt.Printf("trainId depStId arrStId price   departureTime   arrivalTime\n")
 	for i := range trains {
 		fmt.Printf("%v \t%v  \t%v  \t%v \t%d:%d:%d   \t%d:%d:%d \n",
 			trains[i].TrainID,
 			trains[i].DepartureStationID,
 			trains[i].ArrivalStationID,
 			trains[i].Price,
-			trains[i].ArrivalTime.Hour(),
-			trains[i].ArrivalTime.Minute(),
-			trains[i].ArrivalTime.Second(),
 			trains[i].DepartureTime.Hour(),
 			trains[i].DepartureTime.Minute(),
-			trains[i].DepartureTime.Second())
+			trains[i].DepartureTime.Second(),
+			trains[i].ArrivalTime.Hour(),
+			trains[i].ArrivalTime.Minute(),
+			trains[i].ArrivalTime.Second())
+
 	}
 }
 
@@ -161,17 +165,20 @@ func (t *Train) UnmarshalJSON(data []byte) error {
 		Alias: (*Alias)(t),
 	}
 
-	if err := json.Unmarshal(data, aux); err != nil {
+	err := json.Unmarshal(data, aux)
+	if err != nil {
 		return fmt.Errorf("read time as string: %w", err)
 	}
 
-	const (
-		layout   = "2006-01-02 15:04:05"
-		fixedDay = "2006-01-02 "
-	)
+	t.ArrivalTime, err = time.Parse("15:04:05", aux.ArrivalTime)
+	if err != nil {
+		return fmt.Errorf("error parse arrival time: %w", err)
+	}
 
-	t.ArrivalTime, _ = time.Parse(layout, fixedDay+aux.ArrivalTime)
-	t.DepartureTime, _ = time.Parse(layout, fixedDay+aux.DepartureTime)
+	t.DepartureTime, err = time.Parse("15:04:05", aux.DepartureTime)
+	if err != nil {
+		return fmt.Errorf("error parse departure time: %w", err)
+	}
 
 	return nil
 }
